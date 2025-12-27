@@ -1,0 +1,278 @@
+/*
+ * Copyright (c) 2023 Marin Jurjević <marin.jurjevic@hotmail.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <st/g0/stm32g070Xb.dtsi>
+#include <st/g0/stm32g070rbtx-pinctrl.dtsi>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/ {
+	model = "LED driver v3";
+	compatible = "jethro,led_driver_v3";
+
+	chosen {
+		zephyr,console = &usart1;
+		zephyr,shell-uart = &usart1;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+	};
+
+	zephyr,user {
+		io-channels = <&adc1 0>, <&adc1 1>, <&adc1 2> ;
+	};
+
+	leds: leds {
+		compatible = "gpio-leds";
+
+		green_led_1: led_1 {
+			gpios = <&gpiob 8 GPIO_ACTIVE_HIGH>;
+			label = "LED1";
+		};
+		green_led_2: led_2 {
+			gpios = <&gpiob 9 GPIO_ACTIVE_HIGH>;
+			label = "LED2";
+		};
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+
+		io0: button_0 {
+			label = "IO0";
+			gpios = <&gpiob 14 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_0>;
+		};
+		io1: button_1 {
+			label = "IO1";
+			gpios = <&gpiob 15 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_1>;
+		};
+		io2: button_2 {
+			label = "IO2";
+			gpios = <&gpioa 8 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_2>;
+		};
+		io3: button_3 {
+			label = "IO3";
+			gpios = <&gpioa 9 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_3>;
+		};
+	};
+
+	// W1
+	w1: w1 {
+		compatible = "zephyr,w1-gpio";
+		gpios = <&gpioc 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+		status = "okay";
+
+		ds18b20_0: ds18b20_0 {
+			compatible = "maxim,ds18b20";
+			family-code = <0x28>;
+			resolution = <12>;
+			status = "okay";
+		};
+
+		ds18b20_1: ds18b20_1 {
+			compatible = "maxim,ds18b20";
+			family-code = <0x28>;
+			resolution = <12>;
+			status = "okay";
+		};
+	};
+
+	pwmleds {
+		compatible = "pwm-leds";
+
+		led_o1: led_o1 {
+			pwms = <&pwm 1 65535 PWM_POLARITY_NORMAL>;
+		};
+		led_o2: led_o2 {
+			pwms = <&pwm 2 65535 PWM_POLARITY_NORMAL>;
+		};
+		led_o3: led_o3 {
+			pwms = <&pwm 3 65535 PWM_POLARITY_NORMAL>;
+		};
+/*
+		green_pwm_led: green_pwm_led {
+			pwms = <&pwm2 0 15625000 PWM_POLARITY_INVERTED>;
+		};
+
+		blue_pwm_led: blue_pwm_led {
+			pwms = <&pwm3 5 15625000 PWM_POLARITY_INVERTED>;
+		};
+*/
+	};
+
+	aliases {
+		led1 = &green_led_1;
+		led2 = &green_led_2;
+		sw0 = &io0;
+		sw1 = &io1;
+		sw2 = &io2;
+		sw3 = &io3;
+		watchdog0 = &iwdg;
+		die-temp0 = &die_temp;
+		volt-sensor0 = &vref;
+		pwmled1 = &led_o1;
+		pwmled2 = &led_o2;
+		pwmled3 = &led_o3;
+		adc0 = &adc1;
+
+	};
+};
+
+&clk_lsi {
+	status = "okay";
+};
+
+&clk_hsi {
+	status = "okay";
+};
+
+&pll {
+	div-m = <1>;
+	mul-n = <8>;
+	div-p = <2>;
+	div-r = <2>;
+	clocks = <&clk_hsi>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(64)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <1>;
+};
+
+&usart3 {
+	pinctrl-0 = <&usart3_tx_pb10 &usart3_rx_pb11>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+
+	modbus0 {
+		compatible = "zephyr,modbus-serial";
+		status = "okay";
+		de-gpios = <&gpiob 1 GPIO_ACTIVE_HIGH>;	/* PB1 */
+	};
+
+};
+
+
+&usart1 {
+	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+
+};
+
+
+&rtc {
+	clocks = <&rcc STM32_CLOCK(APB1, 10)>,
+		 <&rcc STM32_SRC_LSI RTC_SEL(2)>;
+
+	status = "okay";
+};
+
+&iwdg {
+	status = "okay";
+};
+
+&timers3 {
+	st,prescaler = <1>;
+	status = "okay";
+
+	pwm: pwm {
+		status = "okay";
+		pinctrl-0 = <&tim3_ch1_pa6 &tim3_ch2_pa7 &tim3_ch3_pb0>;
+		pinctrl-names = "default";
+	};
+};
+
+
+
+/*
+&i2c1 {
+	pinctrl-0 = <&i2c1_scl_pb6 &i2c1_sda_pb7>;
+	pinctrl-names = "default";
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_FAST>;
+};
+*/
+&adc1 {
+
+//	clocks = <&rcc STM32_CLOCK(APB1_2, 20)>,<&rcc STM32_SRC_SYSCLK ADC_SEL(0)>;
+	pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1 &adc1_in2_pa2>;
+	pinctrl-names = "default";
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	status = "okay";
+
+
+	dmas = < &dmamux1 0 5 (STM32_DMA_PERIPH_TO_MEMORY |
+		STM32_DMA_MEM_INC |  STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS) >;
+
+	dma-names = "dmamux";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_MAX>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_MAX>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@2 {
+		reg = <2>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_MAX>;
+		zephyr,resolution = <12>;
+	};
+};
+
+&dma1 {
+    status = "okay";
+};
+
+test_dma: &dmamux1 {
+	status = "okay";
+};
+
+&die_temp {
+	status = "okay";
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* Set 4KB of storage at the end of 128KB flash */
+		storage_partition: partition@1f000 {
+			label = "storage";
+			reg = <0x0001f000 DT_SIZE_K(4)>;
+		};
+	};
+};
+
+&vref {
+	status = "okay";
+};

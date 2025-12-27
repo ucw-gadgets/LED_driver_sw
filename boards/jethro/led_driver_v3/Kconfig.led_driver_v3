@@ -1,0 +1,5 @@
+# Copyright (c) 2023 Marin Jurjević <marin.jurjevic@hotmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_LED_DRIVER_V3
+	select SOC_STM32G070XX

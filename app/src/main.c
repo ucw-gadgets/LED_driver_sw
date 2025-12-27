@@ -1,80 +1,111 @@
 /*
- * Copyright (c) 2021 Nordic Semiconductor ASA
+ * Copyright (c) 2020 PHYTEC Messtechnik GmbH
+ * Copyright (c) 2022 Nordic Semiconductor ASA
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/modbus/modbus.h>
+#include <zephyr/drivers/pwm.h>
 #include <zephyr/drivers/sensor.h>
+
+#include "modbus_cb.h"
+#include "config.h"
+#include "adc.h"
+#include "onewire.h"
+#include "pwm.h"
+
 #include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
-#include <app/drivers/blink.h>
+static const struct gpio_dt_spec led_dev[] = {
+	GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios),
+	GPIO_DT_SPEC_GET(DT_ALIAS(led2), gpios),
+};
 
-#include <app_version.h>
+uint8_t coils_state;
 
-LOG_MODULE_REGISTER(main, CONFIG_APP_LOG_LEVEL);
 
-#define BLINK_PERIOD_MS_STEP 100U
-#define BLINK_PERIOD_MS_MAX  1000U
+const static struct modbus_iface_param server_param = {
+	.mode = MODBUS_MODE_RTU,
+	.server = {
+		.user_cb = &mbs_cbs,
+		.unit_id = MODBUS_ADDR,
+	},
+	.serial = {
+		.baud = 115200,
+		.parity = UART_CFG_PARITY_NONE,
+	},
+};
+
+#define MODBUS_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zephyr_modbus_serial)
+
+static int init_modbus_server(void)
+{
+	const char iface_name[] = {DEVICE_DT_NAME(MODBUS_NODE)};
+	int iface;
+
+	iface = modbus_iface_get_by_name(iface_name);
+
+	if (iface < 0) {
+		LOG_ERR("Failed to get iface index for %s", iface_name);
+		return iface;
+	}
+
+	return modbus_init_server(iface, server_param);
+}
 
 int main(void)
 {
+	int err;
+
+	for (int i = 0; i < ARRAY_SIZE(led_dev); i++) {
+		if (!gpio_is_ready_dt(&led_dev[i])) {
+			LOG_ERR("LED%u GPIO device not ready", i);
+			return 0;
+		}
+
+		err = gpio_pin_configure_dt(&led_dev[i], GPIO_OUTPUT_INACTIVE);
+		if (err != 0) {
+			LOG_ERR("Failed to configure LED%u pin", i);
+			return 0;
+		}
+	}
+
+
 	int ret;
-	unsigned int period_ms = BLINK_PERIOD_MS_MAX;
-	const struct device *sensor, *blink;
-	struct sensor_value last_val = { 0 }, val;
-
-	printk("Zephyr Example Application %s\n", APP_VERSION_STRING);
-
-	sensor = DEVICE_DT_GET(DT_NODELABEL(example_sensor));
-	if (!device_is_ready(sensor)) {
-		LOG_ERR("Sensor not ready");
-		return 0;
+	if (init_pwm()){
+		LOG_ERR("PWM initialization failed");
 	}
 
-	blink = DEVICE_DT_GET(DT_NODELABEL(blink_led));
-	if (!device_is_ready(blink)) {
-		LOG_ERR("Blink LED not ready");
-		return 0;
+
+	if (init_modbus_server()) {
+		LOG_ERR("Modbus RTU server initialization failed");
 	}
 
-	ret = blink_off(blink);
-	if (ret < 0) {
-		LOG_ERR("Could not turn off LED (%d)", ret);
-		return 0;
+	if (init_adc()){
+		LOG_ERR("ADC initialization failed");
 	}
 
-	printk("Use the sensor to change LED blinking period\n");
-
-	while (1) {
-		ret = sensor_sample_fetch(sensor);
-		if (ret < 0) {
-			LOG_ERR("Could not fetch sample (%d)", ret);
+	while (true){
+		LOG_INF("Waiting...");
+		int rc;
+		rc = print_die_temperature();
+		if (rc < 0) {
 			return 0;
 		}
-
-		ret = sensor_channel_get(sensor, SENSOR_CHAN_PROX, &val);
-		if (ret < 0) {
-			LOG_ERR("Could not get sample (%d)", ret);
+		rc = print_vref_voltage();
+		if (rc < 0) {
 			return 0;
 		}
+		read_adc();
 
-		if ((last_val.val1 == 0) && (val.val1 == 1)) {
-			if (period_ms == 0U) {
-				period_ms = BLINK_PERIOD_MS_MAX;
-			} else {
-				period_ms -= BLINK_PERIOD_MS_STEP;
-			}
-
-			printk("Proximity detected, setting LED period to %u ms\n",
-			       period_ms);
-			blink_set_period_ms(blink, period_ms);
-		}
-
-		last_val = val;
-
-		k_sleep(K_MSEC(100));
+		rescan_onewire();
+		trigger_sensors(collected_sensors_onewire, num_collected_sensors_onewire);
+		k_msleep(1000);
 	}
-
 	return 0;
 }
-
