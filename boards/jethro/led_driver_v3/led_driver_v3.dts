@@ -87,13 +87,13 @@
 		compatible = "pwm-leds";
 
 		led_o1: led_o1 {
-			pwms = <&pwm 1 65535 PWM_POLARITY_NORMAL>;
+			pwms = <&pwm 3 65535 PWM_POLARITY_NORMAL>;
 		};
 		led_o2: led_o2 {
 			pwms = <&pwm 2 65535 PWM_POLARITY_NORMAL>;
 		};
 		led_o3: led_o3 {
-			pwms = <&pwm 3 65535 PWM_POLARITY_NORMAL>;
+			pwms = <&pwm 1 65535 PWM_POLARITY_NORMAL>;
 		};
 /*
 		green_pwm_led: green_pwm_led {
